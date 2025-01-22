@@ -1,0 +1,43 @@
+name: check
+
+on:
+  #schedule:
+  #- cron: "0 2 * * *"
+
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    outputs:
+      omp_release: ${{ steps.omp.outputs.release }}
+      omp_x64_releasea: ${{ steps.omp_x64.outputs.release }}
+    steps:
+      - id: omp
+        uses: pozetroninc/github-action-get-latest-release@master
+        with:
+          owner: openmultiplayer
+          repo: open.mp
+          excludes: prerelease, draft
+          token: ${{ secrets.GITHUB_TOKEN }}
+         
+      - id: omp_x64
+        uses: pozetroninc/github-action-get-latest-release@master
+        with:
+          repository: ${{ github.repository }}
+          excludes: prerelease, draft
+          token: ${{ secrets.GITHUB_TOKEN }} 
+  create_release:
+    runs-on: ubuntu-latest
+    needs: check
+    steps:
+      - name: Create Release
+        id: create_release
+        uses: comnoco/create-release@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          release_name: ${{ steps.omp.outputs.release }}
+          body: https://github.com/openmultiplayer/open.mp/releases/tag/${{ steps.omp.outputs.release }}
+          draft: false
+          prerelease: false
