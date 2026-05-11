@@ -84,7 +84,7 @@ jobs:
         run: |
           $env:OMP_BUILD_VERSION=$(git rev-list $(git rev-list --max-parents=0 HEAD) HEAD | Measure-Object -Line).Lines
           $env:OMP_BUILD_COMMIT=$(git rev-parse HEAD)
-          cmake -S . -B build -DCMAKE_BUILD_TYPE=$env:BUILD_CONFIG -A x64 -T "ClangCL"
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=${{ env.BUILD_CONFIG }} -A x64 -T "ClangCL"
 
       - name: Build
         shell: pwsh
@@ -132,14 +132,13 @@ jobs:
       - name: Package build output
         run: |
           artifact_name="open.mp-linux-x86_64-dynssl-${RELEASE_TAG}"
-          cd docker/build/Output/${BUILD_CONFIG}
-          tar -cJvf "${artifact_name}.tar.xz" "Server"
+          tar -C docker/build/Output/${BUILD_CONFIG} -cJvf "${artifact_name}.tar.xz" "Server"
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
           name: open.mp-linux-x86_64-dynssl-${{ env.RELEASE_TAG }}
-          path: docker/build/Output/${{ env.BUILD_CONFIG }}/open.mp-linux-x86_64-dynssl-${{ env.RELEASE_TAG }}.tar.xz
+          path: ./open.mp-linux-x86_64-dynssl-${{ env.RELEASE_TAG }}.tar.xz
           if-no-files-found: error
 
   create-release:
