@@ -55,7 +55,7 @@ jobs:
       RELEASE_TAG: ${{ needs.check-release.outputs.release_tag }}
       BUILD_CONFIG: RelWithDebInfo
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           repository: openmultiplayer/open.mp
           ref: ${{ env.RELEASE_TAG }}
@@ -113,7 +113,7 @@ jobs:
       BUILD_CONFIG: RelWithDebInfo
       UBUNTU_VERSION: "18.04"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           repository: openmultiplayer/open.mp
           ref: ${{ env.RELEASE_TAG }}
