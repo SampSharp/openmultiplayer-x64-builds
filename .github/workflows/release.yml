@@ -138,7 +138,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: open.mp-linux-x86_64-dynssl-${{ env.RELEASE_TAG }}
-          path: open.mp-linux-x86_64-dynssl-${{ env.RELEASE_TAG }}.tar.xz
+          path: ./open.mp-linux-x86_64-dynssl-${{ env.RELEASE_TAG }}.tar.xz
           if-no-files-found: error
 
   create-release:
