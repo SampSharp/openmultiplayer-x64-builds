@@ -1,43 +1,164 @@
-name: check
+name: Release x64 builds
 
 on:
-  #schedule:
-  #- cron: "0 2 * * *"
-
+  schedule:
+    - cron: "0 2 * * *"
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
-  check:
+  check-release:
     runs-on: ubuntu-latest
     outputs:
-      omp_release: ${{ steps.omp.outputs.release }}
-      omp_x64_releasea: ${{ steps.omp_x64.outputs.release }}
+      should_build: ${{ steps.check.outputs.should_build }}
+      release_tag: ${{ steps.check.outputs.release_tag }}
+      release_name: ${{ steps.check.outputs.release_name }}
+      release_url: ${{ steps.check.outputs.release_url }}
     steps:
-      - id: omp
-        uses: pozetroninc/github-action-get-latest-release@master
+      - id: check
+        uses: actions/github-script@v7
         with:
-          owner: openmultiplayer
-          repo: open.mp
-          excludes: prerelease, draft
-          token: ${{ secrets.GITHUB_TOKEN }}
-         
-      - id: omp_x64
-        uses: pozetroninc/github-action-get-latest-release@master
+          script: |
+            const upstream = await github.rest.repos.getLatestRelease({
+              owner: 'openmultiplayer',
+              repo: 'open.mp',
+            });
+
+            let currentTag = '';
+            try {
+              const current = await github.rest.repos.getLatestRelease({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+              });
+              currentTag = current.data.tag_name;
+            } catch (error) {
+              if (error.status !== 404) {
+                throw error;
+              }
+            }
+
+            const releaseTag = upstream.data.tag_name;
+            const shouldBuild = releaseTag !== currentTag;
+
+            core.setOutput('should_build', String(shouldBuild));
+            core.setOutput('release_tag', releaseTag);
+            core.setOutput('release_name', upstream.data.name || releaseTag);
+            core.setOutput('release_url', upstream.data.html_url);
+
+  build-windows-x64:
+    runs-on: windows-latest
+    needs: check-release
+    if: needs.check-release.outputs.should_build == 'true'
+    env:
+      RELEASE_TAG: ${{ needs.check-release.outputs.release_tag }}
+      BUILD_CONFIG: RelWithDebInfo
+    steps:
+      - uses: actions/checkout@v4
         with:
-          repository: ${{ github.repository }}
-          excludes: prerelease, draft
-          token: ${{ secrets.GITHUB_TOKEN }} 
-  create_release:
+          repository: openmultiplayer/open.mp
+          ref: ${{ env.RELEASE_TAG }}
+          clean: true
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Install CMake
+        uses: lukka/get-cmake@latest
+        with:
+          cmakeVersion: "3.23.2"
+
+      - name: Install latest conan
+        shell: bash
+        run: |
+          python -m pip install --upgrade pip
+          pip install -v "conan==1.57.0"
+
+      - name: Generate build files
+        shell: pwsh
+        run: |
+          $env:OMP_BUILD_VERSION=$(git rev-list $(git rev-list --max-parents=0 HEAD) HEAD | Measure-Object -Line).Lines
+          $env:OMP_BUILD_COMMIT=$(git rev-parse HEAD)
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=$env:BUILD_CONFIG -A x64 -T "ClangCL"
+
+      - name: Build
+        shell: pwsh
+        run: cmake --build build --config $env:BUILD_CONFIG
+
+      - name: Package build output
+        shell: bash
+        run: |
+          artifact_name="open.mp-win-x64-${RELEASE_TAG}"
+          cd build/Output/${BUILD_CONFIG}
+          powershell -NoLogo -NoProfile -Command "Compress-Archive -DestinationPath '${artifact_name}.zip' -Path 'Server'"
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: open.mp-win-x64-${{ env.RELEASE_TAG }}
+          path: build/Output/${{ env.BUILD_CONFIG }}/open.mp-win-x64-${{ env.RELEASE_TAG }}.zip
+          if-no-files-found: error
+
+  build-linux-x64:
     runs-on: ubuntu-latest
-    needs: check
+    needs: check-release
+    if: needs.check-release.outputs.should_build == 'true'
+    env:
+      RELEASE_TAG: ${{ needs.check-release.outputs.release_tag }}
+      BUILD_CONFIG: RelWithDebInfo
+      UBUNTU_VERSION: "18.04"
     steps:
-      - name: Create Release
-        id: create_release
-        uses: comnoco/create-release@v2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/checkout@v4
         with:
-          release_name: ${{ steps.omp.outputs.release }}
-          body: https://github.com/openmultiplayer/open.mp/releases/tag/${{ steps.omp.outputs.release }}
-          draft: false
-          prerelease: false
+          repository: openmultiplayer/open.mp
+          ref: ${{ env.RELEASE_TAG }}
+          clean: true
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Set ownership
+        run: chown -R $(id -u):$(id -g) "$PWD"
+
+      - name: Build
+        run: |
+          cd docker
+          CONFIG=${BUILD_CONFIG} UBUNTU_VERSION=${UBUNTU_VERSION} BUILD_SHARED=true BUILD_SERVER=1 BUILD_TOOLS=0 TARGET_BUILD_ARCH=x86_64 ./build.sh
+
+      - name: Package build output
+        run: |
+          artifact_name="open.mp-linux-x86_64-dynssl-${RELEASE_TAG}"
+          cd docker/build/Output/${BUILD_CONFIG}
+          tar -cJvf "${artifact_name}.tar.xz" "Server"
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: open.mp-linux-x86_64-dynssl-${{ env.RELEASE_TAG }}
+          path: docker/build/Output/${{ env.BUILD_CONFIG }}/open.mp-linux-x86_64-dynssl-${{ env.RELEASE_TAG }}.tar.xz
+          if-no-files-found: error
+
+  create-release:
+    runs-on: ubuntu-latest
+    needs:
+      - check-release
+      - build-windows-x64
+      - build-linux-x64
+    if: needs.check-release.outputs.should_build == 'true'
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.check-release.outputs.release_tag }}
+          name: ${{ needs.check-release.outputs.release_name }}
+          body: "Upstream release notes: ${{ needs.check-release.outputs.release_url }}"
+          files: artifacts/**/*.*
