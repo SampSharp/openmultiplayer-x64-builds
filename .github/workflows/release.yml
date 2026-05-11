@@ -98,7 +98,7 @@ jobs:
           powershell -NoLogo -NoProfile -Command "Compress-Archive -DestinationPath '${artifact_name}.zip' -Path 'Server'"
 
       - name: Upload build artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: open.mp-win-x64-${{ env.RELEASE_TAG }}
           path: build/Output/${{ env.BUILD_CONFIG }}/open.mp-win-x64-${{ env.RELEASE_TAG }}.zip
@@ -135,7 +135,7 @@ jobs:
           tar -C docker/build/Output/${BUILD_CONFIG} -cJvf "${artifact_name}.tar.xz" "Server"
 
       - name: Upload build artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: open.mp-linux-x86_64-dynssl-${{ env.RELEASE_TAG }}
           path: ./open.mp-linux-x86_64-dynssl-${{ env.RELEASE_TAG }}.tar.xz
