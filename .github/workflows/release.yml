@@ -155,7 +155,7 @@ jobs:
           path: artifacts
 
       - name: Create release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ needs.check-release.outputs.release_tag }}
           name: ${{ needs.check-release.outputs.release_name }}
