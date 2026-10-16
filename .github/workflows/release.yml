@@ -73,11 +73,11 @@ jobs:
         with:
           cmakeVersion: "3.23.2"
 
-      - name: Install latest conan
+      - name: Install Conan 2
         shell: bash
         run: |
           python -m pip install --upgrade pip
-          pip install -v "conan==1.57.0"
+          python -m pip install -v "conan>=2,<3"
 
       - name: Generate build files
         shell: pwsh
